@@ -2,6 +2,7 @@ package com.dinamica.services;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.Properties;
 import java.util.logging.Level;
@@ -25,6 +26,7 @@ class LDAPUtils {
     
     final String conntype  = "simple";
     final String ldapCtxt  = "com.sun.jndi.ldap.LdapCtxFactory";
+    final Hashtable<Object, Object> env = new Hashtable<Object, Object>();
     
     private String url;
     private String domainStr;
@@ -37,13 +39,12 @@ class LDAPUtils {
     private String userPass;
     private String userFirstName; 
     private String userLastName;
+    private DirContext dctx;
     
     public LDAPUtils() {
-        Properties prop = new Properties();
-        InputStream input = null;
-        
+        final Properties prop = new Properties();        
         try {
-            input = getClass().getClassLoader().getResourceAsStream("config.properties");
+            final InputStream input = getClass().getClassLoader().getResourceAsStream("config.properties");
             prop.load(input);
             domainStr = prop.getProperty("domainStr", "dc=maxcrc,dc=com");
             url = prop.getProperty("url", "ldap://localhost:389");
@@ -52,95 +53,134 @@ class LDAPUtils {
             mail = prop.getProperty("mail", "@maxcrc.com");
             adminName = prop.getProperty("adminName", "cn=Manager,dc=maxcrc,dc=com");
             adminPwd = prop.getProperty("adminPwd", "secret");
-        } catch(IOException ex) {
-            Logger.getLogger(getClass().getName()).log(Level.SEVERE, null, ex);
-        }
-    }
-
-    public void addUser() throws NamingException {
-            final Hashtable<Object, Object> env = new Hashtable<Object, Object>();
-            DirContext dctx = null;
-            try {
-                    env.put(Context.INITIAL_CONTEXT_FACTORY, ldapCtxt);
-                    env.put(Context.PROVIDER_URL, url);
-                    env.put(Context.SECURITY_AUTHENTICATION, conntype);
-                    env.put(Context.SECURITY_PRINCIPAL, adminName);
-                    env.put(Context.SECURITY_CREDENTIALS, adminPwd);
-                    dctx = new InitialDirContext(env);
-                    // Create a container set of attributes
-                    final Attributes container = new BasicAttributes();
-
-                    // Create the objectclass to add
-                    final Attribute objClasses = new BasicAttribute("objectClass");
-                    objClasses.add("inetOrgPerson");
-
-                    // Assign the username, first name, and last name
-                    final Attribute commonName = new BasicAttribute("cn", new StringBuffer().append(userFirstName).append(" ").append(userLastName).toString());
-                    final Attribute email = new BasicAttribute("mail", new StringBuffer().append(userId).append(mail).toString());
-                    final Attribute givenName = new BasicAttribute("givenName", userFirstName);
-                    final Attribute uid = new BasicAttribute("uid", userId);
-                    final Attribute surName = new BasicAttribute("sn", userLastName);
-
-                    // Add password
-                    final Attribute userPassword = new BasicAttribute("userpassword", Utils.hashAndEncodePassword(userPass));
-
-                    // Add these to the container
-                    container.put(objClasses);
-                    container.put(commonName);
-                    container.put(givenName);
-                    container.put(email);
-                    container.put(uid);
-                    container.put(surName);
-                    container.put(userPassword);
-
-                    // Create the entry
-                    dctx.createSubcontext(getUserDN(), container);
-            } finally {
-                    if (null != dctx) {
-                            try {
-                                    dctx.close();
-                            } catch (final NamingException e) {
-                                    System.out.println("Error in closing ldap " + e);
-                            }
-                    }
-            }
-    }
-    
-    public Attributes searchUser(String[] srchResult) throws NamingException {
-            final Hashtable<Object, Object> env = new Hashtable<Object, Object>();
-            DirContext dctx = null;
-            
+            //
             env.put(Context.INITIAL_CONTEXT_FACTORY, ldapCtxt);
             env.put(Context.PROVIDER_URL, url);
             env.put(Context.SECURITY_AUTHENTICATION, conntype);
             env.put(Context.SECURITY_PRINCIPAL, adminName);
             env.put(Context.SECURITY_CREDENTIALS, adminPwd);
             dctx = new InitialDirContext(env);
+            //
+        } catch(IOException|NamingException ex) {
+            Logger.getLogger(getClass().getName()).log(Level.SEVERE, null, ex);
+        }
+    }
 
-            // Create a search control
-            final SearchControls constraints = new SearchControls();
-            constraints.setSearchScope(SearchControls.SUBTREE_SCOPE);
-            constraints.setReturningAttributes(srchResult);
-            
-            final Attributes container = new BasicAttributes();
-            final Attribute atrUid = new BasicAttribute("cn", userId);
-            final Attribute AtrOu = new BasicAttribute("ou", orgUnitStr);
-            container.put(atrUid);
-            container.put(AtrOu);
-            
+    public void addUser() throws NamingException {
+        // Create a container set of attributes
+        final Attributes container = new BasicAttributes();
+
+        // Create the objectclass to add
+        final Attribute objClasses = new BasicAttribute("objectClass");
+        objClasses.add("inetOrgPerson");
+
+        // Assign the username, first name, and last name
+        final Attribute commonName = new BasicAttribute("cn", new StringBuffer().append(userFirstName).append(" ").append(userLastName).toString());
+        final Attribute email = new BasicAttribute("mail", new StringBuffer().append(userId).append(mail).toString());
+        final Attribute givenName = new BasicAttribute("givenName", userFirstName);
+        final Attribute uid = new BasicAttribute("uid", userId);
+        final Attribute surName = new BasicAttribute("sn", userLastName);
+
+        // Add password
+        final Attribute userPassword = new BasicAttribute("userpassword", Utils.hashAndEncodePassword(userPass));
+
+        // Add these to the container
+        container.put(objClasses);
+        container.put(commonName);
+        container.put(givenName);
+        container.put(email);
+        container.put(uid);
+        container.put(surName);
+        container.put(userPassword);
+
+        // Create the entry
+        dctx.createSubcontext(getUserDN(), container);
+        
+        if (null != dctx) {
             try {
-                final NamingEnumeration ne = dctx.search(getUserDN(), "(objectClass=*)", constraints);
-
-                if(ne.hasMore()) {
-                    final SearchResult rs= (SearchResult)ne.next();
-                    final Attributes attrs = rs.getAttributes();
-                    return attrs;
-                }
-                return null;
-            } catch (NameNotFoundException ex) {
-                Logger.getLogger(getClass().getName()).log(Level.SEVERE, null, ex);
-                return null;
+                dctx.close();
+            } catch (final NamingException e) {
+                System.out.println("Error in closing ldap " + e);
             }
+        }
+    }
+    
+    public Attributes searchUser(String[] srchResult) throws NamingException {
+        // Create a search control
+        final SearchControls constraints = new SearchControls();
+        constraints.setSearchScope(SearchControls.SUBTREE_SCOPE);
+        constraints.setReturningAttributes(srchResult);
+
+        final Attributes container = new BasicAttributes();
+        final Attribute atrUid = new BasicAttribute("cn", userId);
+        final Attribute AtrOu = new BasicAttribute("ou", orgUnitStr);
+        container.put(atrUid);
+        container.put(AtrOu);
+
+        try {
+            final NamingEnumeration ne = dctx.search(getUserDN(), "(objectClass=*)", constraints);
+
+            if(ne.hasMore()) {
+                final SearchResult rs= (SearchResult)ne.next();
+                final Attributes attrs = rs.getAttributes();
+                return attrs;
+            }
+            return null;
+        } catch (NameNotFoundException ex) {
+            Logger.getLogger(getClass().getName()).log(Level.SEVERE, null, ex);
+            return null;
+        }
+    }
+    
+    public NamingEnumeration searchDom(String[] srchResult) throws NamingException {
+        // Create a search control
+        final SearchControls constraints = new SearchControls();
+        constraints.setSearchScope(SearchControls.SUBTREE_SCOPE);
+        if (srchResult.length > 0) {
+            constraints.setReturningAttributes(srchResult);
+        }
+        //Begin Search
+        try {
+            final NamingEnumeration values = dctx.search(domainStr, "(objectClass=*)", constraints);
+            while (values.hasMoreElements()) {
+                SearchResult result = (SearchResult) values.next();
+                Attributes attribs = result.getAttributes();
+                if (null != attribs) {
+                    if (null == attribs.get("ou")) {
+                        for (NamingEnumeration ae = attribs.getAll(); ae.hasMoreElements();) {
+                            Attribute atr = (Attribute) ae.next();
+                            String attributeID = atr.getID();
+                            for (Enumeration vals = atr.getAll(); 
+                                vals.hasMoreElements(); 
+                                System.out.println(attributeID +": "+ vals.nextElement()));
+                        }
+                    }
+                }              
+            }
+            return null;
+        } catch (NameNotFoundException ex) {
+            Logger.getLogger(getClass().getName()).log(Level.SEVERE, null, ex);
+            return null;
+        }
+    }
+    
+    public NamingEnumeration searchOu(String[] srchResult) throws NamingException {
+        // Create a search control
+        final SearchControls constraints = new SearchControls();
+        constraints.setSearchScope(SearchControls.SUBTREE_SCOPE);
+        constraints.setReturningAttributes(srchResult);
+        //Define Scope as OrganizationUnit
+        final Attributes container = new BasicAttributes();
+        final Attribute AtrOu = new BasicAttribute("ou", orgUnitStr);
+        container.put(AtrOu);
+        //Begin Search
+        try {
+            final NamingEnumeration ne = dctx.search(getUserDN(), "(objectClass=*)", constraints);
+            return ne;
+        } catch (NameNotFoundException ex) {
+            Logger.getLogger(getClass().getName()).log(Level.SEVERE, null, ex);
+            return null;
+        }
     }
 
     public Boolean authUser() {
@@ -167,15 +207,15 @@ class LDAPUtils {
     }
 
     public String getUserDN() {
-            final String userCN = new StringBuffer().append("cn=").append(userId).toString();
-            final String orgUnit = new StringBuffer().append(",ou=").append(orgUnitStr).toString();
-            final String domain = new StringBuffer().append(",").append(domainStr).toString();
-            return new StringBuffer().append(userCN).append(orgUnit).append(domain).toString();
+        final String userCN = new StringBuffer().append("cn=").append(userId).toString();
+        final String orgUnit = new StringBuffer().append(",ou=").append(orgUnitStr).toString();
+        final String domain = new StringBuffer().append(",").append(domainStr).toString();
+        return new StringBuffer().append(userCN).append(orgUnit).append(domain).toString();
     }
 
     public Attributes getAttrs() {
         // Set up the environment for creating the initial context
-        Hashtable<String, Object> env = new Hashtable<String, Object>(11);
+        Hashtable<String, Object> env = new Hashtable<String, Object>();
         env.put(Context.INITIAL_CONTEXT_FACTORY, ldapCtxt);
         env.put(Context.PROVIDER_URL, url);
         try {
