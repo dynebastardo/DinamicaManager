@@ -4,6 +4,17 @@
         <param-name>preemptiveAuthentication</param-name>
         <param-value>true</param-value>
     </context-param>
+    <context-param>
+        <param-name>log4j-config-location</param-name>
+        <param-value>/WEB-INF/log4j.properties</param-value>
+    </context-param>
+    <context-param>
+        <param-name>ldap-config-location</param-name>
+        <param-value>/WEB-INF/ldap.properties</param-value>
+    </context-param>
+    <listener>
+        <listener-class>com.dinamica.services.ContextListener</listener-class>
+    </listener>
     <session-config>
         <session-timeout>
             30

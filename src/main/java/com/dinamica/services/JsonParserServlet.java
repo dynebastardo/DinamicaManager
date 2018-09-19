@@ -4,6 +4,8 @@ import com.google.gson.Gson;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Base64;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
@@ -39,7 +41,7 @@ public class JsonParserServlet extends HttpServlet {
                 }
             }
         } catch(Exception ex) {
-            response.getOutputStream().print(ExceptionUtils.getStackTrace(ex));
+            Logger.getLogger(LDAPUtils.class.getName()).log(Level.SEVERE, null, ex);
         }
         response.getOutputStream().flush();
     }

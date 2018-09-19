@@ -11,6 +11,8 @@ import org.json.JSONObject;
 
 public class ActionsHandler {
     
+    final private static org.apache.log4j.Logger log = org.apache.log4j.Logger.getLogger(ActionsHandler.class);
+    
     private LDAPUtils ldap;
     private HttpServletRequest req;
     
@@ -57,8 +59,9 @@ public class ActionsHandler {
                       }   
                 }
             }
-        } catch (NamingException ex1) {
-            Logger.getLogger(JsonParserServlet.class.getName()).log(Level.SEVERE, null, ex1);
+        } catch (NamingException ex) {
+            Logger.getLogger(JsonParserServlet.class.getName()).log(Level.SEVERE, null, ex);
+            log.error(ex);
             return null;
         }
         return json;
@@ -88,25 +91,34 @@ public class ActionsHandler {
         } else {
             ldap.setDefaultOrgUnitStr();
         }
-            
         
+        //Validate if DN already exists
         try {
-            final String[] srchResult = {"uid"};
-            final Attributes attr = ldap.searchUser(srchResult);
-            String uid = new String();
-            if (attr != null) {
-                uid = attr.get("uid").toString();
-                uid = uid.substring(uid.indexOf(":") + 1).trim();
+            final NamingEnumeration nEnum = ldap.searchDomain(new String[]{"distinguishedName"},null,ldap.getUserDN());
+            final Attributes attrs = ldap.singleSearch(nEnum);
+            final String dn = attrs.get("distinguishedName").get().toString();
+            if (dn.equalsIgnoreCase(ldap.getUserDN())) {
+                log.error("Pirulito");
+                return json.put("result", "duplicateDN");
             }
-            if (!uid.equals(ldap.getUserId())){
-                ldap.addUser();
-                return json.put("result", "success");
-            } else {
-                return json.put("result", "duplicate");
-            }                
-        } catch (NamingException ex) {
-            Logger.getLogger(ActionsHandler.class.getName()).log(Level.SEVERE, null, ex);
-            return json.put("result", "error");
+        } catch (NamingException|NullPointerException ex) {
+            log.info(ex);
+            //Ignore
         }
+        //Validate if UserID already used
+        try {
+            String filter = new StringBuffer().append("(sAMAccountName=").append(ldap.getUserId()).append(")").toString();
+            final NamingEnumeration nEnum = ldap.searchDomain(new String[]{"sAMAccountName"},filter);
+            final Attributes attrs = ldap.singleSearch(nEnum);
+            final String uid = attrs.get("sAMAccountName").get().toString();
+            if (uid.equalsIgnoreCase(ldap.getUserId())) {
+                return json.put("result", "duplicateUID");
+            }
+        } catch (NamingException|NullPointerException ex) {
+            log.info(ex);
+            //Ignore
+        }
+        ldap.addUser();
+        return json.put("result", "success");
     }
 }
