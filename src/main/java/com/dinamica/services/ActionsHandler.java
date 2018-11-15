@@ -1,75 +1,43 @@
 package com.dinamica.services;
 
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import com.google.gson.JsonObject;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
-import javax.naming.directory.Attribute;
 import javax.naming.directory.Attributes;
 import javax.servlet.http.HttpServletRequest;
-import org.json.JSONObject;
 
 public class ActionsHandler {
     
     final private static org.apache.log4j.Logger log = org.apache.log4j.Logger.getLogger(ActionsHandler.class);
     
-    private LDAPUtils ldap;
-    private HttpServletRequest req;
-    
-    public ActionsHandler(LDAPUtils param) {
-        // Receive LDAP Context from parent
-        ldap = param;
-    }
-    
-    public JSONObject run(String action, HttpServletRequest request) {
-        req = request;
+    public JsonObject run(String action, HttpServletRequest request) {
         //Switches between values of action= parameter
         switch(action) {
-            case "userParameters": return userParameters();
-            case "createUser":     return createUser();
-            default: return null;
+            case "login"         : return login(action, request);
+            case "userparameters": return userParameters(action, request);
+            case "createuser"    : return createUser(action, request);
+            default              : return defReturn(action);
         }
     }
     
-    // Returns array of all user parameters
-    private JSONObject userParameters() {
-        //Gets User id
-        final String userId = req.getParameter("uid");
-        //Gets User's Organization Unit
-        final String orgUnitStr = req.getParameter("ou");
-        JSONObject json = new JSONObject();
-        //Sets User Id for LDAP Conext
-        ldap.setUserId(userId);
-        // If not blank, sets User Organization Unit for LDAP Conext
-        if (orgUnitStr != null && !orgUnitStr.isEmpty()) {
-            ldap.setOrgUnitStr(orgUnitStr);
-        }
-        //Loops through all User Attributes and spools to JSONObject
-        try {
-            for (NamingEnumeration ae = ldap.getAttrs().getAll(); ae.hasMore();) {
-                final Attribute attr = (Attribute) ae.next();
-                for (NamingEnumeration e = attr.getAll(); e.hasMore(); e.toString()) {
-                    //If the Attribute is userPassword, tries do decode
-                    if (attr.getID().equals("userPassword")) {
-                        final String pwd = new String((byte[]) e.next());
-                        json.put(attr.getID(), pwd);
-                      } else {
-                    //If it's not the password, pass the pure Attribute
-                        json.put(attr.getID(), e.next());
-                      }   
-                }
-            }
-        } catch (NamingException ex) {
-            Logger.getLogger(JsonParserServlet.class.getName()).log(Level.SEVERE, null, ex);
-            log.error(ex);
-            return null;
-        }
+    //Accomplishes Login
+    private JsonObject login(String action, HttpServletRequest req) {
+        JsonObject json = new JsonObject();
+        json.addProperty("result", "true");
+        json.addProperty("action", action);
         return json;
     }
     
+    // Returns array of all user parameters
+    private JsonObject userParameters(String action, HttpServletRequest req) {
+        LDAPUtils ldap = new LDAPUtils();        
+        NamingEnumeration nam = ldap.searchDomain();
+        return Utils.nEnumToJSON(nam);
+    }
+    
     //Creates a User
-    private JSONObject createUser() {
-        JSONObject json = new JSONObject();
+    private JsonObject createUser(String action, HttpServletRequest req) {
+        JsonObject json = new JsonObject();
         final String parameter = req.getParameter("userInfo");
         final String[] info = parameter.split(",");
         //Sets the mandatory parameters:
@@ -77,6 +45,7 @@ public class ActionsHandler {
         // 1 - Last Name
         // 2 - User Id 
         // 3 - Password
+        LDAPUtils ldap = new LDAPUtils();
         if (info.length >= 4) {
             ldap.setUserFirstName(info[0]);
             ldap.setUserLastName(info[1]);
@@ -99,7 +68,8 @@ public class ActionsHandler {
             final String dn = attrs.get("distinguishedName").get().toString();
             if (dn.equalsIgnoreCase(ldap.getUserDN())) {
                 log.error("Pirulito");
-                return json.put("result", "duplicateDN");
+                json.addProperty("result", "duplicateDN");
+                return json;
             }
         } catch (NamingException|NullPointerException ex) {
             log.info(ex);
@@ -112,13 +82,23 @@ public class ActionsHandler {
             final Attributes attrs = ldap.singleSearch(nEnum);
             final String uid = attrs.get("sAMAccountName").get().toString();
             if (uid.equalsIgnoreCase(ldap.getUserId())) {
-                return json.put("result", "duplicateUID");
+                json.addProperty("result", "duplicateUID");
+                return json;
             }
         } catch (NamingException|NullPointerException ex) {
             log.info(ex);
             //Ignore
         }
         ldap.addUser();
-        return json.put("result", "success");
+        json.addProperty("result", "success");
+        return json;
+    }
+    
+    private JsonObject defReturn(String action) {
+        JsonObject json = new JsonObject();
+        json.addProperty("result", "error"); 
+        json.addProperty("action", action); 
+        json.addProperty("message", "Action not found"); 
+        return json;
     }
 }

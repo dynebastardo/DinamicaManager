@@ -1,7 +1,6 @@
 package com.dinamica.services;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.Enumeration;
 import java.util.Hashtable;
@@ -48,9 +47,10 @@ class LDAPUtils {
     private String userLastName;
     
     public LDAPUtils() {
-        final Properties prop = new Properties();        
+        Properties prop = new Properties();        
         try {
-            prop.load(ContextListener.ldapProperties);
+            prop.load(ContextListener.loadLdapProps());
+            //prop.load(ContextListener.ldapProperties);
             domainStr = prop.getProperty("domainStr", "dc=maxcrc,dc=com");
             url = prop.getProperty("url", "ldap://localhost:389");
             orgUnitStr = prop.getProperty("orgUnitStr", "People");
@@ -58,6 +58,7 @@ class LDAPUtils {
             mail = prop.getProperty("mail", "@maxcrc.com");
             adminName = prop.getProperty("adminName", "cn=Manager,dc=maxcrc,dc=com");
             adminPwd = prop.getProperty("adminPwd", "secret");
+            ContextListener.closeLdapProps();
             //
         } catch(IOException ex) {
             Logger.getLogger(getClass().getName()).log(Level.SEVERE, null, ex);
@@ -361,6 +362,9 @@ class LDAPUtils {
         }
     }
            
+    //--------------------------------------------------------------------------
+    //  Getters & Setters
+    //--------------------------------------------------------------------------
     public String getUrl() {
         return url;
     }
